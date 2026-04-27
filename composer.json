@@ -1,0 +1,50 @@
+{
+  "name": "badawy24/pushify",
+  "description": "Laravel multi-provider push notification package with Firebase and OneSignal support.",
+  "keywords": [
+    "laravel",
+    "push notification",
+    "push notifications",
+    "firebase",
+    "onesignal",
+    "fcm",
+    "notifications"
+  ],
+  "homepage": "https://github.com/backend-2022/pushify",
+  "support": {
+    "source": "https://github.com/backend-2022/pushify",
+    "issues": "https://github.com/backend-2022/pushify/issues"
+  },
+  "type": "library",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Abdelrahman Badawy",
+      "role": "Developer"
+    }
+  ],
+  "autoload": {
+    "psr-4": {
+      "Badawy\\Pushify\\": "src/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Badawy\\Pushify\\PushifyServiceProvider"
+      ]
+    }
+  },
+  "require": {
+    "php": "^8.2",
+    "illuminate/cache": "^12.0",
+    "illuminate/console": "^12.0",
+    "illuminate/database": "^12.0",
+    "illuminate/foundation": "^12.0",
+    "illuminate/http": "^12.0",
+    "illuminate/routing": "^12.0",
+    "illuminate/support": "^12.0"
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true
+}
