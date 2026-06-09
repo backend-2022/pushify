@@ -18,4 +18,15 @@ class OneSignalProvider implements PushifyProviderInterface
     ): array {
         return $this->oneSignalService->sendToAll($title, $body, $data, $image, $scheduledAt);
     }
+
+    public function sendToUser(
+        array|string $userIds,
+        string $title,
+        string $body,
+        array $data = [],
+        ?string $image = null,
+        ?string $scheduledAt = null
+    ): array {
+        return $this->oneSignalService->sendToUser($userIds, $title, $body, $data, $image, $scheduledAt);
+    }
 }

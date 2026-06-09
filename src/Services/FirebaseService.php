@@ -57,6 +57,58 @@ class FirebaseService
         return $response->json() ?? [];
     }
 
+    public function sendToUser(array|string $userIds, string $title, string $body, array $data = [], ?string $image = null): array
+    {
+        $userIds = (array) $userIds;
+        $responses = [];
+
+        foreach ($userIds as $token) {
+            $credentials = $this->credentials();
+            $projectId = $credentials['project_id'] ?? null;
+
+            if (! $projectId) {
+                throw new RuntimeException('Firebase project_id is missing.');
+            }
+
+            $messageData = array_map(static fn ($value) => is_scalar($value) ? (string) $value : json_encode($value), $data);
+
+            if ($image) {
+                $messageData['image'] = $image;
+            }
+
+            $payload = [
+                'message' => [
+                    'token' => $token,
+                    'notification' => [
+                        'title' => $title,
+                        'body' => $body,
+                    ],
+                    'data' => $messageData,
+                ],
+            ];
+
+            if ($image) {
+                $payload['message']['android']['notification']['image'] = $image;
+                $payload['message']['apns']['payload']['aps']['mutable-content'] = 1;
+                $payload['message']['apns']['fcm_options']['image'] = $image;
+            }
+
+            if ((bool) config('pushify.log_payload', false)) {
+                Log::info('Firebase push payload prepared.', ['payload' => $payload]);
+            }
+
+            $response = Http::acceptJson()
+                ->withToken($this->accessToken())
+                ->timeout(30)
+                ->post("https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send", $payload);
+
+            $response->throw();
+            $responses[] = $response->json() ?? [];
+        }
+
+        return $responses;
+    }
+
     private function credentials(): array
     {
         $path = (string) config('pushify.firebase.credentials');

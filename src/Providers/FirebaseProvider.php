@@ -18,4 +18,15 @@ class FirebaseProvider implements PushifyProviderInterface
     ): array {
         return $this->firebaseService->sendToTopic($title, $body, $data, $image);
     }
+
+    public function sendToUser(
+        array|string $userIds,
+        string $title,
+        string $body,
+        array $data = [],
+        ?string $image = null,
+        ?string $scheduledAt = null
+    ): array {
+        return $this->firebaseService->sendToUser($userIds, $title, $body, $data, $image);
+    }
 }

@@ -16,6 +16,15 @@ interface PushifyServiceInterface
         ?string $scheduledAt = null
     ): Pushify;
 
+    public function sendToUser(
+        array|string $userIds,
+        string $title,
+        string $body,
+        array $data = [],
+        ?string $image = null,
+        ?string $scheduledAt = null
+    ): Pushify;
+
     public function send(Pushify $notification): Pushify;
 
     public function markScheduledAsSent(): int;

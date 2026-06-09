@@ -52,6 +52,34 @@ class PushifyService implements PushifyServiceInterface
         return $this->send($notification);
     }
 
+    public function sendToUser(
+        array|string $userIds,
+        string $title,
+        string $body,
+        array $data = [],
+        ?string $image = null,
+        ?string $scheduledAt = null
+    ): Pushify {
+        $data['_target_users'] = (array) $userIds;
+
+        $notification = $this->create([
+            'title' => $title,
+            'body' => $body,
+            'image' => $image,
+            'data' => $data,
+            'scheduled_at' => $scheduledAt,
+        ]);
+
+        $provider = config('pushify.provider', 'firebase');
+        $scheduledDate = $scheduledAt ? Carbon::parse($scheduledAt) : null;
+
+        if ($provider === 'firebase' && $scheduledDate?->isFuture()) {
+            return $notification->refresh();
+        }
+
+        return $this->send($notification);
+    }
+
     public function send(Pushify $notification): Pushify
     {
         $providerName = config('pushify.provider', 'firebase');
@@ -64,13 +92,28 @@ class PushifyService implements PushifyServiceInterface
                 'error_message' => null,
             ])->save();
 
-            $this->factory->make($providerName)->sendToAll(
-                title: $notification->title,
-                body: $notification->body,
-                data: $notification->data ?? [],
-                image: $notification->image,
-                scheduledAt: $scheduledAt,
-            );
+            $targetUsers = $notification->data['_target_users'] ?? null;
+            $dataPayload = $notification->data ?? [];
+            unset($dataPayload['_target_users']);
+
+            if ($targetUsers) {
+                $this->factory->make($providerName)->sendToUser(
+                    userIds: $targetUsers,
+                    title: $notification->title,
+                    body: $notification->body,
+                    data: $dataPayload,
+                    image: $notification->image,
+                    scheduledAt: $scheduledAt,
+                );
+            } else {
+                $this->factory->make($providerName)->sendToAll(
+                    title: $notification->title,
+                    body: $notification->body,
+                    data: $dataPayload,
+                    image: $notification->image,
+                    scheduledAt: $scheduledAt,
+                );
+            }
 
             $isOneSignalScheduled = $providerName === 'onesignal' && $notification->isScheduledForFuture();
 
