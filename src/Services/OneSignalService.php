@@ -57,6 +57,55 @@ class OneSignalService
         return $response->json() ?? [];
     }
 
+    public function sendToUser(array|string $userIds, string $title, string $body, array $data = [], ?string $image = null, ?string $sendAfter = null): array
+    {
+        $appId = trim((string) config('pushify.onesignal.app_id'));
+        $apiKey = trim((string) config('pushify.onesignal.api_key'));
+        $apiUrl = rtrim((string) config('pushify.onesignal.api_url'), '/');
+
+        if ($appId === '' || $apiKey === '') {
+            throw new RuntimeException('OneSignal credentials are missing.');
+        }
+
+        $payload = [
+            'app_id' => $appId,
+            'target_channel' => 'push',
+            'include_player_ids' => (array) $userIds,
+            'headings' => ['en' => $title, 'ar' => $title],
+            'contents' => ['en' => $body, 'ar' => $body],
+        ];
+
+        if ($data !== []) {
+            $payload['data'] = $data;
+        }
+
+        if ($image) {
+            $payload['global_image'] = $image;
+            $payload['big_picture'] = $image;
+            $payload['large_icon'] = $image;
+            $payload['chrome_web_image'] = $image;
+            $payload['ios_attachments'] = ['notification_image' => $image];
+            $payload['mutable_content'] = true;
+            $payload['data']['image'] = $image;
+        }
+
+        if ($sendAfter) {
+            $payload['send_after'] = $sendAfter;
+        }
+
+        $this->logPayload($payload);
+
+        $response = Http::acceptJson()
+            ->connectTimeout(10)
+            ->timeout(30)
+            ->withHeaders(['Authorization' => 'Key '.$apiKey])
+            ->post($apiUrl, $payload);
+
+        $response->throw();
+
+        return $response->json() ?? [];
+    }
+
     private function logPayload(array $payload): void
     {
         if (! (bool) config('pushify.log_payload', false)) {
