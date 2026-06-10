@@ -73,7 +73,7 @@ class OneSignalService
             'app_id' => $appId,
             'target_channel' => 'push',
             'include_aliases' => [
-                'external_id' => (array) $userIds
+                'external_id' => array_map('strval', (array) $userIds),
             ],
             'headings' => ['en' => $title, 'ar' => $title],
             'contents' => ['en' => $body, 'ar' => $body],
