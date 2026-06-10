@@ -57,6 +57,8 @@ class OneSignalService
         return $response->json() ?? [];
     }
 
+
+    
     public function sendToUser(array|string $userIds, string $title, string $body, array $data = [], ?string $image = null, ?string $sendAfter = null): array
     {
         $appId = trim((string) config('pushify.onesignal.app_id'));
@@ -70,7 +72,9 @@ class OneSignalService
         $payload = [
             'app_id' => $appId,
             'target_channel' => 'push',
-            'include_player_ids' => (array) $userIds,
+            'include_aliases' => [
+                'external_id' => (array) $userIds
+            ],
             'headings' => ['en' => $title, 'ar' => $title],
             'contents' => ['en' => $body, 'ar' => $body],
         ];
