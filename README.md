@@ -2,14 +2,14 @@
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/badawy24/pushify.svg?style=flat-square)](https://packagist.org/packages/badawy24/pushify) [![PHP Version](https://img.shields.io/badge/php-%5E8.2-blue?style=flat-square)](https://www.php.net) [![Laravel Version](https://img.shields.io/badge/laravel-%5E12.0-red?style=flat-square)](https://laravel.com) [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 
-> Laravel backend package for sending push notifications through one selected provider at a time.
+> Laravel backend package for sending push notifications through one selected provider at a time, with OneSignal device subscription management built in.
 
 Supported providers:
 
-| Provider | Scheduling |
-|---|---|
-| 🔥 Firebase Cloud Messaging (FCM) | Via scheduled command |
-| 📣 OneSignal | Native `send_after` |
+| Provider | Scheduling | Subscriptions |
+|---|---|---|
+| 🔥 Firebase Cloud Messaging (FCM) | Via scheduled command | — |
+| 📣 OneSignal | Native `send_after` | ✅ Device register & logout |
 
 ---
 
@@ -21,15 +21,20 @@ pushify/
 │   └── pushify.php
 ├── database/
 │   └── migrations/
-│       └── 2026_01_01_000000_create_pushify_notifications_table.php
+│       ├── 2026_01_01_000000_create_pushify_notifications_table.php
+│       ├── 2026_01_02_000000_create_pushify_subscriptions_table.php
+│       └── 2026_01_03_000000_add_pushify_external_id_to_users_table.php
 ├── routes/
 │   └── pushify.php
 ├── src/
 │   ├── Commands/
 │   │   └── SendScheduledPushifyNotifications.php
+│   ├── Concerns/
+│   │   └── HasPushifyExternalId.php
 │   ├── Contracts/
 │   │   ├── PushifyProviderInterface.php
-│   │   └── PushifyServiceInterface.php
+│   │   ├── PushifyServiceInterface.php
+│   │   └── PushifySubscriptionsInterface.php
 │   ├── Factories/
 │   │   └── PushifyProviderFactory.php
 │   ├── Http/
@@ -40,14 +45,18 @@ pushify/
 │   │   └── Resources/
 │   │       └── PushifyResource.php
 │   ├── Models/
-│   │   └── Pushify.php
+│   │   ├── Pushify.php
+│   │   └── PushifySubscription.php
 │   ├── Providers/
 │   │   ├── FirebaseProvider.php
 │   │   └── OneSignalProvider.php
 │   ├── Services/
 │   │   ├── FirebaseService.php
 │   │   ├── OneSignalService.php
-│   │   └── PushifyService.php
+│   │   ├── PushifyService.php
+│   │   └── PushifySubscriptionsService.php
+│   ├── Support/
+│   │   └── PushifyExternalIdGenerator.php
 │   └── PushifyServiceProvider.php
 ├── stubs/
 │   ├── Http/
@@ -73,6 +82,8 @@ pushify/
 - [Configuration](#configuration)
 - [Routes](#routes)
 - [Usage](#usage)
+  - [Notifications](#notifications)
+  - [Subscriptions (OneSignal)](#subscriptions-onesignal)
 - [Notification Statuses](#notification-statuses)
 - [Scheduled Command](#scheduled-command)
 - [Customizing the HTTP Layer](#customizing-the-http-layer)
@@ -89,6 +100,7 @@ pushify/
 - PHP >= 8.2
 - Laravel >= 12.0
 - OpenSSL PHP extension *(required for Firebase JWT signing — no external Google SDK needed)*
+- A `users` table *(required before running Pushify migrations)*
 
 ---
 
@@ -143,17 +155,36 @@ php artisan vendor:publish --tag=pushify-http
 
 ## Migration
 
+> **Important:** Your `users` table must exist before running migrations. If it does not, the migration will abort with a clear error message.
+
 ```bash
 php artisan migrate
 ```
 
-Creates the `pushify_notifications` table:
+### Tables created / modified
+
+**`pushify_notifications`** — notification log:
 
 ```text
 id, title, body, image, data, scheduled_at,
 status, sent_at, failed_at, error_message,
 created_at, updated_at
 ```
+
+**`pushify_subscriptions`** — registered devices:
+
+```text
+id, external_id, device_token, subscription_id,
+device_type, created_at, updated_at
+```
+
+**`users`** — column added:
+
+```text
+pushify_external_id   (nullable, unique)   e.g. AGFGFFGY_1
+```
+
+The `pushify_external_id` is generated automatically on first use: `8 random chars` + `_` + `user_id`.
 
 ---
 
@@ -191,7 +222,14 @@ ONESIGNAL_API_KEY=your-api-key
 ONESIGNAL_API_URL=https://api.onesignal.com/notifications
 ```
 
-OneSignal sends to `included_segments => ['All']`.
+OneSignal `sendToAll` sends to `included_segments => ['All']`.
+
+### Users (external ID)
+
+```env
+PUSHIFY_USERS_TABLE=users
+PUSHIFY_EXTERNAL_ID_COLUMN=pushify_external_id
+```
 
 ### Optional
 
@@ -241,46 +279,70 @@ Route::prefix(config('pushify.routes.prefix', 'pushify'))
 
 ## Usage
 
-### Inject the service interface
+The package exposes two separate interfaces:
+
+| Interface | Purpose |
+|---|---|
+| `PushifyServiceInterface` | Send notifications |
+| `PushifySubscriptionsInterface` | Register & remove devices *(OneSignal only)* |
+
+Both are bound automatically — **no manual binding required**.
+
+---
+
+### Notifications
+
+#### Inject the service
 
 ```php
 use Badawy\Pushify\Contracts\PushifyServiceInterface;
 ```
 
-The package binds this interface automatically — **no manual binding required**.
-
----
-
-### Send immediately
+#### Send to all
 
 ```php
-use Badawy\Pushify\Contracts\PushifyServiceInterface;
-
-class OfferController extends Controller
-{
-    public function notify(PushifyServiceInterface $push)
-    {
-        $notification = $push->sendToAll(
-            title: 'New offer',
-            body: 'Check our latest offers now',
-            data: [
-                'type'     => 'offer',
-                'offer_id' => 15,
-            ],
-            image: 'https://example.com/image.jpg',
-            scheduledAt: null,
-        );
-
-        return response()->json($notification);
-    }
-}
+$notification = $push->sendToAll(
+    title: 'New offer',
+    body: 'Check our latest offers now',
+    data: [
+        'type'     => 'offer',
+        'offer_id' => 15,
+    ],
+    image: 'https://example.com/image.jpg',
+    scheduledAt: null,
+);
 ```
 
-Both Firebase and OneSignal send immediately when `scheduledAt` is `null`.
+#### Send to a specific user
 
----
+Use `sendToUserById()` with your local `user_id` — the package resolves `pushify_external_id` from the `users` table automatically:
 
-### Schedule a notification
+```php
+$notification = $push->sendToUserById(
+    userIds: $user->id,
+    title: 'Order updated',
+    body: 'Your order status has changed',
+    data: [
+        'type'     => 'order_status_updated',
+        'order_id' => 15,
+    ],
+);
+```
+
+OneSignal delivers to **all devices** registered under that user's `external_id`.
+
+You can also pass `external_id` strings directly via `sendToUser()`:
+
+```php
+$notification = $push->sendToUser(
+    userIds: [$user->pushifyExternalId()],
+    title: 'Order updated',
+    body: 'Your order status has changed',
+    data: ['type' => 'order_status_updated'],
+);
+```
+
+#### Schedule a notification
 
 ```php
 $notification = $push->sendToAll(
@@ -297,9 +359,7 @@ $notification = $push->sendToAll(
 | 🔥 Firebase | Saved as `pending` — sent by the command when `scheduled_at <= now()` |
 | 📣 OneSignal | Submitted immediately with native `send_after` — OneSignal handles the delay |
 
----
-
-### Create only (without sending)
+#### Create only (without sending)
 
 ```php
 $notification = $push->create([
@@ -311,11 +371,7 @@ $notification = $push->create([
 ]);
 ```
 
-Saved as `pending`. Nothing is sent until you manually call `send()` or run the command.
-
----
-
-### Send an existing notification
+#### Send an existing notification
 
 ```php
 use Badawy\Pushify\Models\Pushify;
@@ -323,6 +379,142 @@ use Badawy\Pushify\Models\Pushify;
 $notification = Pushify::findOrFail($id);
 $notification = $push->send($notification);
 ```
+
+#### `PushifyServiceInterface` methods
+
+```php
+public function create(array $payload): Pushify;
+
+public function sendToAll(
+    string $title,
+    string $body,
+    array $data = [],
+    ?string $image = null,
+    ?string $scheduledAt = null
+): Pushify;
+
+public function sendToUser(
+    array|string $userIds,
+    string $title,
+    string $body,
+    array $data = [],
+    ?string $image = null,
+    ?string $scheduledAt = null
+): Pushify;
+
+public function sendToUserById(
+    array|int $userIds,
+    string $title,
+    string $body,
+    array $data = [],
+    ?string $image = null,
+    ?string $scheduledAt = null
+): Pushify;
+
+public function send(Pushify $notification): Pushify;
+
+public function markScheduledAsSent(): int;
+```
+
+---
+
+### Subscriptions (OneSignal)
+
+> Requires `PUSHIFY_PROVIDER=onesignal`.
+
+#### Setup — add trait to your User model
+
+```php
+use Badawy\Pushify\Concerns\HasPushifyExternalId;
+
+class User extends Authenticatable
+{
+    use HasPushifyExternalId;
+}
+```
+
+#### Inject the service
+
+```php
+use Badawy\Pushify\Contracts\PushifySubscriptionsInterface;
+```
+
+#### Full flow
+
+```php
+class AuthController extends Controller
+{
+    public function __construct(
+        private readonly PushifySubscriptionsInterface $subscriptions,
+        private readonly PushifyServiceInterface $pushify,
+    ) {}
+
+    // 1. Login — register device
+    public function registerDevice(Request $request)
+    {
+        $subscription = $this->subscriptions->addUserFor(
+            userId: $request->user()->id,
+            token: $request->input('device_token'),
+            data: ['type' => 'Android'],
+        );
+
+        return response()->json($subscription);
+    }
+
+    // 2. Send notification (from anywhere in your app)
+    public function notifyUser(int $userId)
+    {
+        $this->pushify->sendToUserById(
+            userIds: $userId,
+            title: 'Hello',
+            body: 'You have a new notification',
+            data: ['type' => 'general'],
+        );
+    }
+
+    // 3. Logout — remove device
+    public function logout(Request $request)
+    {
+        $this->subscriptions->removeDevice($request->input('device_token'));
+
+        // ... your logout logic
+    }
+}
+```
+
+#### What happens internally
+
+| Step | Method | Action |
+|---|---|---|
+| Login | `addUserFor($userId, $token)` | Generates `pushify_external_id` on `users`, registers device on OneSignal, saves `device_token` + `subscription_id` in `pushify_subscriptions` |
+| Notify | `sendToUserById($userId, ...)` | Resolves `pushify_external_id` from `users`, sends via OneSignal to all user devices |
+| Logout | `removeDevice($deviceToken)` | Deletes subscription from OneSignal, removes row from `pushify_subscriptions` |
+
+#### `PushifySubscriptionsInterface` methods
+
+```php
+// Register device using local user_id (recommended)
+public function addUserFor(int $userId, string $token, array $data = []): PushifySubscription;
+
+// Register device using a manual external_id
+public function addUser(string $externalId, string $token, array $data = []): PushifySubscription;
+
+// Remove device on logout using device_token
+public function removeDevice(string $deviceToken): void;
+```
+
+#### Optional `$data` fields for `addUserFor` / `addUser`
+
+| Field | Description |
+|---|---|
+| `type` | Device type, e.g. `Android`, `iOS` |
+| `language` | User language, e.g. `ar` |
+| `timezone_id` | e.g. `Africa/Cairo` |
+| `country` | e.g. `EG` |
+| `tags` | Key-value tags array |
+| `device_model` | e.g. `iPhone 15` |
+| `device_os` | e.g. `iOS 18` |
+| `app_version` | e.g. `1.0.0` |
 
 ---
 
@@ -333,38 +525,17 @@ php artisan tinker
 ```
 
 ```php
+// Register device
+app(\Badawy\Pushify\Contracts\PushifySubscriptionsInterface::class)
+    ->addUserFor(1, 'your-fcm-token', ['type' => 'Android']);
+
+// Send notification
 app(\Badawy\Pushify\Contracts\PushifyServiceInterface::class)
-    ->sendToAll(
-        title: 'Hello',
-        body: 'Test from Tinker',
-        data: ['type' => 'test'],
-        image: null,
-        scheduledAt: null,
-    );
-```
+    ->sendToUserById(1, 'Hello', 'Test from Tinker', ['type' => 'test']);
 
----
-
-### Available interface methods
-
-```php
-// Store a notification record without sending
-public function create(array $payload): Pushify;
-
-// Create and send (or schedule) in one call
-public function sendToAll(
-    string $title,
-    string $body,
-    array $data = [],
-    ?string $image = null,
-    ?string $scheduledAt = null
-): Pushify;
-
-// Send an existing stored notification
-public function send(Pushify $notification): Pushify;
-
-// Mark due OneSignal scheduled notifications as sent locally
-public function markScheduledAsSent(): int;
+// Logout device
+app(\Badawy\Pushify\Contracts\PushifySubscriptionsInterface::class)
+    ->removeDevice('your-fcm-token');
 ```
 
 ---
@@ -440,7 +611,17 @@ class CustomProvider implements PushifyProviderInterface
         ?string $image = null,
         ?string $scheduledAt = null
     ): array {
-        // Your HTTP call or SDK integration here
+        return ['success' => true];
+    }
+
+    public function sendToUser(
+        array|string $userIds,
+        string $title,
+        string $body,
+        array $data = [],
+        ?string $image = null,
+        ?string $scheduledAt = null
+    ): array {
         return ['success' => true];
     }
 }

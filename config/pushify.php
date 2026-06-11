@@ -28,4 +28,9 @@ return [
     ],
 
     'log_payload' => env('PUSHIFY_LOG_PAYLOAD', false),
+
+    'users' => [
+        'table' => env('PUSHIFY_USERS_TABLE', 'users'),
+        'external_id_column' => env('PUSHIFY_EXTERNAL_ID_COLUMN', 'pushify_external_id'),
+    ],
 ];

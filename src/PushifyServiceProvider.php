@@ -4,7 +4,10 @@ namespace Badawy\Pushify;
 
 use Badawy\Pushify\Commands\SendScheduledPushifyNotifications;
 use Badawy\Pushify\Contracts\PushifyServiceInterface;
+use Badawy\Pushify\Contracts\PushifySubscriptionsInterface;
 use Badawy\Pushify\Services\PushifyService;
+use Badawy\Pushify\Services\PushifySubscriptionsService;
+use Badawy\Pushify\Support\PushifyExternalIdGenerator;
 use Illuminate\Support\ServiceProvider;
 
 class PushifyServiceProvider extends ServiceProvider
@@ -13,7 +16,10 @@ class PushifyServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../config/pushify.php', 'pushify');
 
+        $this->app->singleton(PushifyExternalIdGenerator::class);
+
         $this->app->bind(PushifyServiceInterface::class, PushifyService::class);
+        $this->app->bind(PushifySubscriptionsInterface::class, PushifySubscriptionsService::class);
     }
 
     public function boot(): void

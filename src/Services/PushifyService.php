@@ -5,6 +5,7 @@ namespace Badawy\Pushify\Services;
 use Badawy\Pushify\Contracts\PushifyServiceInterface;
 use Badawy\Pushify\Factories\PushifyProviderFactory;
 use Badawy\Pushify\Models\Pushify;
+use Badawy\Pushify\Support\PushifyExternalIdGenerator;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -12,7 +13,8 @@ use Throwable;
 class PushifyService implements PushifyServiceInterface
 {
     public function __construct(
-        private readonly PushifyProviderFactory $factory
+        private readonly PushifyProviderFactory $factory,
+        private readonly PushifyExternalIdGenerator $externalIdGenerator,
     ) {}
 
     public function create(array $payload): Pushify
@@ -78,6 +80,26 @@ class PushifyService implements PushifyServiceInterface
         }
 
         return $this->send($notification);
+    }
+
+    public function sendToUserById(
+        array|int $userIds,
+        string $title,
+        string $body,
+        array $data = [],
+        ?string $image = null,
+        ?string $scheduledAt = null
+    ): Pushify {
+        $externalIds = $this->externalIdGenerator->forUserIds((array) $userIds);
+
+        return $this->sendToUser(
+            userIds: $externalIds,
+            title: $title,
+            body: $body,
+            data: $data,
+            image: $image,
+            scheduledAt: $scheduledAt,
+        );
     }
 
     public function send(Pushify $notification): Pushify
