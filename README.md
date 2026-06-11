@@ -452,7 +452,7 @@ class AuthController extends Controller
     // 1. Login — register device
     public function registerDevice(Request $request)
     {
-        $subscription = $this->subscriptions->addUserFor(
+        $subscription = $this->subscriptions->subscribe(
             userId: $request->user()->id,
             token: $request->input('device_token'),
             data: ['type' => 'Android'],
@@ -475,7 +475,7 @@ class AuthController extends Controller
     // 3. Logout — remove device
     public function logout(Request $request)
     {
-        $this->subscriptions->removeDevice($request->input('device_token'));
+        $this->subscriptions->unsubscribe($request->input('device_token'));
 
         // ... your logout logic
     }
@@ -486,24 +486,19 @@ class AuthController extends Controller
 
 | Step | Method | Action |
 |---|---|---|
-| Login | `addUserFor($userId, $token)` | Generates `pushify_external_id` on `users`, registers device on OneSignal, saves `device_token` + `subscription_id` in `pushify_subscriptions` |
+| Login | `subscribe($userId, $token)` | Generates `pushify_external_id` on `users`, registers device on OneSignal, saves `device_token` + `subscription_id` in `pushify_subscriptions` |
 | Notify | `sendToUserById($userId, ...)` | Resolves `pushify_external_id` from `users`, sends via OneSignal to all user devices |
-| Logout | `removeDevice($deviceToken)` | Deletes subscription from OneSignal, removes row from `pushify_subscriptions` |
+| Logout | `unsubscribe($deviceToken)` | Deletes subscription from OneSignal, removes row from `pushify_subscriptions` |
 
 #### `PushifySubscriptionsInterface` methods
 
 ```php
-// Register device using local user_id (recommended)
-public function addUserFor(int $userId, string $token, array $data = []): PushifySubscription;
+public function subscribe(int $userId, string $token, array $data = []): PushifySubscription;
 
-// Register device using a manual external_id
-public function addUser(string $externalId, string $token, array $data = []): PushifySubscription;
-
-// Remove device on logout using device_token
-public function removeDevice(string $deviceToken): void;
+public function unsubscribe(string $deviceToken): void;
 ```
 
-#### Optional `$data` fields for `addUserFor` / `addUser`
+#### Optional `$data` fields for `subscribe`
 
 | Field | Description |
 |---|---|
@@ -527,7 +522,7 @@ php artisan tinker
 ```php
 // Register device
 app(\Badawy\Pushify\Contracts\PushifySubscriptionsInterface::class)
-    ->addUserFor(1, 'your-fcm-token', ['type' => 'Android']);
+    ->subscribe(1, 'your-fcm-token', ['type' => 'Android']);
 
 // Send notification
 app(\Badawy\Pushify\Contracts\PushifyServiceInterface::class)
@@ -535,7 +530,7 @@ app(\Badawy\Pushify\Contracts\PushifyServiceInterface::class)
 
 // Logout device
 app(\Badawy\Pushify\Contracts\PushifySubscriptionsInterface::class)
-    ->removeDevice('your-fcm-token');
+    ->unsubscribe('your-fcm-token');
 ```
 
 ---

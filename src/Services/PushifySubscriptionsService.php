@@ -15,17 +15,10 @@ class PushifySubscriptionsService implements PushifySubscriptionsInterface
         private readonly PushifyExternalIdGenerator $externalIdGenerator,
     ) {}
 
-    public function addUserFor(int $userId, string $token, array $data = []): PushifySubscription
+    public function subscribe(int $userId, string $token, array $data = []): PushifySubscription
     {
-        return $this->addUser(
-            externalId: $this->externalIdGenerator->forUserId($userId),
-            token: $token,
-            data: $data,
-        );
-    }
+        $externalId = $this->externalIdGenerator->forUserId($userId);
 
-    public function addUser(string $externalId, string $token, array $data = []): PushifySubscription
-    {
         $appId = trim((string) config('pushify.onesignal.app_id'));
         $apiKey = trim((string) config('pushify.onesignal.api_key'));
 
@@ -33,7 +26,7 @@ class PushifySubscriptionsService implements PushifySubscriptionsInterface
             throw new RuntimeException('Pushify subscriptions credentials are missing.');
         }
 
-        $payload = $this->buildUserPayload($externalId, $token, $data);
+        $payload = $this->buildPayload($externalId, $token, $data);
 
         $this->logPayload($payload);
 
@@ -58,7 +51,7 @@ class PushifySubscriptionsService implements PushifySubscriptionsInterface
         );
     }
 
-    public function removeDevice(string $deviceToken): void
+    public function unsubscribe(string $deviceToken): void
     {
         $subscription = PushifySubscription::query()
             ->where('device_token', $deviceToken)
@@ -96,7 +89,7 @@ class PushifySubscriptionsService implements PushifySubscriptionsInterface
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
-    private function buildUserPayload(string $externalId, string $token, array $data): array
+    private function buildPayload(string $externalId, string $token, array $data): array
     {
         $propertyKeys = [
             'tags',
@@ -206,6 +199,6 @@ class PushifySubscriptionsService implements PushifySubscriptionsInterface
             return;
         }
 
-        Log::info('Pushify add user payload prepared.', ['payload' => $payload]);
+        Log::info('Pushify subscribe payload prepared.', ['payload' => $payload]);
     }
 }
