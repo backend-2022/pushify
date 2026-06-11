@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('pushify_subscriptions', function (Blueprint $table) {
             $table->id();
             $table->string('external_id');
-            $table->text('device_token');
+            $table->string('device_token', 512);
             $table->string('subscription_id');
             $table->string('device_type')->nullable();
             $table->timestamps();
